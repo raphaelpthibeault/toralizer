@@ -1,6 +1,8 @@
 #ifndef TORALIZER_TORALIZE_H
 #define TORALIZER_TORALIZE_H
 
+#include <dlfcn.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,8 +41,7 @@ struct proxy_response {
 typedef struct proxy_response Res;
 
 
-Req *request(const char*,int);
-int main(int,char**);
-
+Req *request(const struct sockaddr_in *);
+int connect(int, const struct sockaddr *, socklen_t);
 
 #endif //TORALIZER_TORALIZE_H

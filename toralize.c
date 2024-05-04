@@ -1,23 +1,15 @@
 #include "toralize.h"
 
-int main(int argc, char *argv[]) {
-    char *host;
-    int port, s;
+int connect(int app_sockfd, const struct sockaddr *app_s, socklen_t app_addrlen) {
+    int s;
     struct sockaddr_in sock;
     Req *req;
     char buf[ressize];
     Res *res;
     int success;
-    char tmp[512];
+    int (*og_connect)(int, const struct sockaddr *, socklen_t);
 
-    if (argc < 3) {
-        fprintf(stderr, "Usage: %s <host> <port>\n", argv[0]);
-        return -1;
-    }
-
-    host = argv[1];
-    port = atoi(argv[2]);
-
+    og_connect = dlsym(RTLD_NEXT, "connect");
     s = socket(AF_INET, SOCK_STREAM, 0);
     if (s < 0) {
         perror("socket");
@@ -28,13 +20,13 @@ int main(int argc, char *argv[]) {
     sock.sin_port = htons(PROXY_PORT);
     sock.sin_addr.s_addr = inet_addr(PROXY);
 
-    if (connect(s, (struct sockaddr *)&sock, sizeof(sock))) {
+    if (og_connect(s, (struct sockaddr *)&sock, sizeof(sock))) {
         perror("connect");
         return -1;
     }
 
     printf("Connected to proxy\n");
-    req = request(host, port);
+    req = request((struct sockaddr_in *)app_s);
     write(s, req, reqsize);
 
     memset(buf, 0, ressize);
@@ -56,48 +48,24 @@ int main(int argc, char *argv[]) {
         return -1;
     }
 
-    printf("Successfully connected through the proxy to %s:%d\n", host, port);
+    printf("Connected through the proxy.\n");
 
-    memset(tmp, 0, 512);
-    snprintf(tmp, 511, ""
-                       "HEAD / HTTP/1.0\r\n"
-                       "Host: www.google.ca/search?q=foo\r\n"
-                       "\r\n");
-
-    int sent_bytes = write(s, tmp, strlen(tmp));
-    if (sent_bytes < 0) {
-        perror("Write failed");
-        return -1;
-    }
-
-    memset(tmp, 0, 512);
-    int received_bytes = read(s, tmp, 511);
-    if (received_bytes < 0) {
-        perror("Read failed");
-        return -1;
-    }
-
-    tmp[received_bytes] = '\0';
-    printf("'%s'\n", tmp);
-
-
-
+    dup2(s, app_sockfd);
     free(req);
-    close(s);
 
     return 0;
 }
 
-Req *request(const char* dstip, const int dstport) {
+Req *request(const struct sockaddr_in *app_sock) {
     Req *req;
 
     req = malloc(reqsize);
     req->vn = 4;
     req->cd = 1;
-    req->dstport = htons(dstport);
-    req->dstip = inet_addr(dstip);
+    req->dstport = app_sock->sin_port;
+    req->dstip = app_sock->sin_addr.s_addr;
 
-    strncpy(req->userid, USERNAME, 8);
+    strncpy((char*)req->userid, USERNAME, 8);
 
     return req;
 }
